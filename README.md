@@ -1,2 +1,2 @@
 # jarvisAI-
-An AI named jarvis created by using python.
+An AI named jarvis created using python.
