@@ -1,0 +1,185 @@
+import pyttsx3
+import subprocess
+import webbrowser
+import speech_recognition as sr
+import time
+import os
+import requests
+import json
+from dotenv import load_dotenv
+from datetime import datetime
+
+load_dotenv()
+
+engine = pyttsx3.init()
+recognizer = sr.Recognizer()
+
+gemini_api_key = os.getenv('GEMINI_API_KEY')
+print(f"Gemini API key: {gemini_api_key}")
+gemini_api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+
+
+def check_internet_connection():
+    try:
+        requests.get("https://www.google.com", timeout=5)
+        return True
+    except requests.ConnectionError:
+        return False
+
+
+def get_gemini_response(prompt):
+    try:
+        if not gemini_api_key:
+            return "Error: Gemini API key not found. Please set the GEMINI_API_KEY environment variable."
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": gemini_api_key
+        }
+        data = {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": prompt
+                  
+                }
+              ]
+            }
+          ]
+          
+      }
+
+        response = requests.post(gemini_api_url, json=data, headers=headers)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+
+        response_json = response.json()
+        
+        if 'candidates' in response_json and response_json['candidates']:
+            return response_json['candidates'][0]['content']['parts'][0]['text'].strip()
+        else:
+            return "Gemini API response did not contain text"
+    except requests.exceptions.RequestException as e:
+        if hasattr(e, 'response'):
+            print("Response Status Code:", e.response.status_code)
+            print("Response Text:", e.response.text)
+        return f"Error making request to Gemini API: {str(e)}"
+    except (KeyError, TypeError) as e:
+        return f"Error parsing Gemini API response: {str(e)}"
+
+
+def speak_text(text):
+    engine.say(text)
+    engine.runAndWait()
+
+
+def open_application(app_name):
+    apps = {
+        "notepad": "notepad.exe",
+        "browser": "start chrome",
+        "youtube": "https://www.youtube.com",
+        "instagram": "https://www.instagram.com",
+        "chess": "https://www.chess.com/home"
+    }
+
+    if app_name in apps:
+        app_path = apps[app_name]
+        try:
+            if app_name in ["youtube", "instagram", "chess"]:
+                webbrowser.open(app_path)
+            else:
+                subprocess.Popen(app_path, shell=True)
+            return f"Opening {app_name}..."
+        except Exception as e:
+            return f"Error opening {app_name}: {str(e)}"
+    else:
+        return "Application not recognized."
+
+
+def listen_to_microphone():
+    if not check_internet_connection():
+        return "No internet connection. Please check your connection."
+
+    with sr.Microphone() as source:
+        print("Listening...")
+        recognizer.adjust_for_ambient_noise(source) # Add this
+        try:
+            audio = recognizer.listen(source, timeout=5) #added a timeout
+            text = recognizer.recognize_google(audio)
+            print(f"You said: {text}")
+            return text
+        except sr.UnknownValueError:
+            print("Speech Recognition: Could not understand audio")
+            return ""  #Return empty to avoid errors
+        except sr.RequestError as e:
+            print(f"Speech Recognition: Error with the speech recognition service. {e}")
+            return "" #Return empty to avoid errors
+        except sr.WaitTimeoutError:
+          print("Speech Recognition: Listening timed out")
+          return "" #Return empty to avoid errors
+        except Exception as e:
+          print(f"An unexpected error occurred during speech recognition: {e}")
+          return "" #Return empty to avoid errors
+
+
+def list_functions():
+    functions = (
+        "I can do the following:\n"
+        "1. Open applications like Notepad and your browser.\n"
+        "2. Open websites like YouTube and Instagram.\n"
+        "3. Answer your questions using Gemini AI.\n"
+        "4. Listen to your voice commands.\n"
+        "5. Speak responses aloud.\n"
+        "6. Tell you the current date and time.\n"
+        "Just ask me what you need!"
+    )
+    return functions
+
+
+def tell_date_time():
+    now = datetime.now()
+    current_time = now.strftime("%I:%M %p")
+    current_date = now.strftime("%A, %B %d, %Y")
+    response = f"The current time is {current_time} and the date is {current_date}"
+    return response
+
+
+def main():
+    greeting = "Hi Commander, I am listening to your commands."
+    print(greeting)
+    speak_text(greeting)
+
+    while True:
+        user_input = listen_to_microphone()
+        
+        if user_input: #This was added to avoid the errors that happen when it is an empty string
+          user_input = user_input.lower().strip()
+          
+          if "bye" in user_input:
+                farewell = "Goodbye, Commander. Shutting down."
+                print(farewell)
+                speak_text(farewell)
+                break
+            
+          elif "who created you" in user_input:
+               response = "I was created by sir Nikhil Bajaj and his team."
+                 
+          elif "what is the time" in user_input or "what's the time" in user_input or "what is the date" in user_input:
+                  response = tell_date_time()
+            
+          elif user_input.startswith('open '):
+                app_name = user_input[5:].strip().lower()
+                response = open_application(app_name)
+          elif user_input == "what can you do":
+                response = list_functions()
+          else:
+                response = get_gemini_response(user_input)
+
+          print(f"Jarvis: {response}")
+          speak_text(response)
+
+        time.sleep(0.5)
+
+
+if __name__ == "__main__":
+    main()
