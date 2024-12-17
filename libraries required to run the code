@@ -1,4 +1,5 @@
-pip install pyttsx3 
-pip install SpeechRecognition
-pip install openai = 0.28.0
 pip install PyAudio
+pip install pyttsx3
+pip install SpeechRecognition
+pip install requests
+pip install python-dotenv
